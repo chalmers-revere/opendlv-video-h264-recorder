@@ -101,9 +101,8 @@ int32_t main(int32_t argc, char **argv) {
         const uint32_t HEIGHT{static_cast<uint32_t>(std::stoi(commandlineArguments["height"]))};
         const uint32_t CID{(commandlineArguments["cid"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["cid"])) : 0};
         const uint32_t ID{(commandlineArguments["id"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["id"])) : 0};
-        const std::string NAME_RECFILE{(commandlineArguments["rec"].size() != 0) ? commandlineArguments["rec"] + "-" + RECSUFFIX : (getYYYYMMDD_HHMMSS() + "-" + RECSUFFIX + ".rec")};
+        const std::string NAME_RECFILE{(commandlineArguments["rec"].size() != 0) ? commandlineArguments["rec"] + RECSUFFIX : (getYYYYMMDD_HHMMSS() + RECSUFFIX + ".rec")};
         const bool VERBOSE{commandlineArguments.count("verbose") != 0};
-
 
         const uint32_t GOP_DEFAULT{10};
         const uint32_t GOP{(commandlineArguments["gop"].size() != 0) ? static_cast<uint32_t>(std::stoi(commandlineArguments["gop"])) : GOP_DEFAULT};
