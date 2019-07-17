@@ -108,7 +108,6 @@ int32_t main(int32_t argc, char **argv) {
 
                     sampleTimeStamp = cluon::time::now();
 
-                    int totalSize{0};
                     sharedMemory->lock();
                     {
                         // Read notification timestamp.
@@ -118,39 +117,37 @@ int32_t main(int32_t argc, char **argv) {
                     std::string data{sharedMemory->data(), sharedMemory->size()};
                     sharedMemory->unlock();
 
-                    if (0 < totalSize) {
-                        opendlv::proxy::ImageReading ir;
-                        ir.fourcc("xyz")
-                          .width(WIDTH)
-                          .height(HEIGHT)
-                          .data(data);
+                    opendlv::proxy::ImageReading ir;
+                    ir.fourcc("xyz")
+                      .width(WIDTH)
+                      .height(HEIGHT)
+                      .data(data);
+                    {
+                        cluon::data::Envelope envelope;
                         {
-                            cluon::data::Envelope envelope;
+                            cluon::ToProtoVisitor protoEncoder;
                             {
-                                cluon::ToProtoVisitor protoEncoder;
-                                {
-                                    envelope.dataType(ir.ID());
-                                    ir.accept(protoEncoder);
-                                    envelope.serializedData(protoEncoder.encodedData());
-                                    envelope.sent(cluon::time::now());
-                                    envelope.sampleTimeStamp(sampleTimeStamp);
-                                    envelope.senderStamp(ID);
-                                }
-                            }
-
-                            std::lock_guard<std::mutex> lck(recFileMutex);
-                            std::string serializedData{cluon::serializeEnvelope(std::move(envelope))};
-                            recFile.write(serializedData.data(), serializedData.size());
-                            recFile.flush();
-
-                            if (VERBOSE) {
-                                afterWriting = cluon::time::now();
+                                envelope.dataType(ir.ID());
+                                ir.accept(protoEncoder);
+                                envelope.serializedData(protoEncoder.encodedData());
+                                envelope.sent(cluon::time::now());
+                                envelope.sampleTimeStamp(sampleTimeStamp);
+                                envelope.senderStamp(ID);
                             }
                         }
+
+                        std::lock_guard<std::mutex> lck(recFileMutex);
+                        std::string serializedData{cluon::serializeEnvelope(std::move(envelope))};
+                        recFile.write(serializedData.data(), serializedData.size());
+                        recFile.flush();
 
                         if (VERBOSE) {
-                            std::clog << "[opendlv-video-xyz-recorder]: XYZ frame saved." << std::endl;
+                            afterWriting = cluon::time::now();
                         }
+                    }
+
+                    if (VERBOSE) {
+                        std::clog << "[opendlv-video-xyz-recorder]: XYZ frame saved." << std::endl;
                     }
                 }
             }
