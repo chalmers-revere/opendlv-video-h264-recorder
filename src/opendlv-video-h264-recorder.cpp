@@ -31,6 +31,7 @@
 #include <mutex>
 #include <sstream>
 #include <vector>
+#include <thread>
 
 int32_t main(int32_t argc, char **argv) {
     int32_t retCode{1};
@@ -140,7 +141,10 @@ int32_t main(int32_t argc, char **argv) {
         const uint32_t I_MULTIPLE_THREADS{(commandlineArguments["threads"].size() != 0) ? std::min(std::max(static_cast<uint32_t>(std::stoi(commandlineArguments["threads"])), ZERO), FOUR): 1};
 
 
-        std::unique_ptr<cluon::SharedMemory> sharedMemory(new cluon::SharedMemory{NAME});
+        std::string const NAME_I420{NAME + ".i420"};
+        std::string const NAME_XYZ{NAME + ".xyz"};
+
+        std::unique_ptr<cluon::SharedMemory> sharedMemory(new cluon::SharedMemory{NAME_I420});
         if (sharedMemory && sharedMemory->valid()) {
             std::clog << "[opendlv-video-h264-recorder]: Attached to '" << sharedMemory->name() << "' (" << sharedMemory->size() << " bytes); recording data to '" << NAME_RECFILE << "'" << std::endl;
 
@@ -249,6 +253,79 @@ int32_t main(int32_t argc, char **argv) {
                                   recFile.flush();
                               }));
                 }
+                
+
+
+
+                std::thread xyzRecord([&NAME_XYZ, &NAME_RECFILE, &VERBOSE, &WIDTH, &HEIGHT, &ID, &recFileMutex, &recFile]()
+                {
+
+                std::unique_ptr<cluon::SharedMemory> sharedMemoryXyz(new cluon::SharedMemory{NAME_XYZ});
+                if (sharedMemoryXyz && sharedMemoryXyz->valid()) {
+                  std::clog << "[opendlv-video-xyz-recorder]: Attached to '" << sharedMemoryXyz->name() << "' (" << sharedMemoryXyz->size() << " bytes); recording data to '" << NAME_RECFILE << "'" << std::endl;
+
+                  while (sharedMemoryXyz && sharedMemoryXyz->valid() && !cluon::TerminateHandler::instance().isTerminated.load()) {
+                    // Wait for incoming frame.
+                    sharedMemoryXyz->wait();
+
+                    cluon::data::TimeStamp sampleTimeStampXyz = cluon::time::now();
+
+                    sharedMemoryXyz->lock();
+                    {
+                      // Read notification timestamp.
+                      auto r = sharedMemoryXyz->getTimeStamp();
+                      sampleTimeStampXyz = (r.first ? r.second : sampleTimeStampXyz);
+                    }
+                    std::string data{sharedMemoryXyz->data(), sharedMemoryXyz->size()};
+                    sharedMemoryXyz->unlock();
+
+                    opendlv::proxy::ImageReading irXyz;
+                    irXyz.fourcc("xyz")
+                      .width(WIDTH)
+                      .height(HEIGHT)
+                      .data(data);
+                    {
+                      cluon::data::Envelope envelope;
+                      {
+                          cluon::ToProtoVisitor protoEncoder;
+                          {
+                            envelope.dataType(irXyz.ID());
+                            irXyz.accept(protoEncoder);
+                            envelope.serializedData(protoEncoder.encodedData());
+                            envelope.sent(cluon::time::now());
+                            envelope.sampleTimeStamp(sampleTimeStampXyz);
+                            envelope.senderStamp(ID);
+                          }
+                      }
+
+                      std::lock_guard<std::mutex> lck(recFileMutex);
+                      std::string serializedData{cluon::serializeEnvelope(std::move(envelope))};
+                      recFile.write(serializedData.data(), serializedData.size());
+                      recFile.flush();
+                    }
+
+                    if (VERBOSE) {
+                      std::clog << "[opendlv-video-h264-recorder]: XYZ frame saved (" << data.size() << " bytes)" << std::endl;
+                    }
+                  }
+                } else {
+                  std::cerr << "[opendlv-video-h264-recorder]: Failed to attach to shared memory '" << NAME_XYZ << "'." << std::endl;
+                }
+                });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
                 while (sharedMemory && sharedMemory->valid() && !cluon::TerminateHandler::instance().isTerminated.load()) {
                     // Wait for incoming frame.
@@ -352,7 +429,7 @@ int32_t main(int32_t argc, char **argv) {
             retCode = 0;
         }
         else {
-            std::cerr << "[opendlv-video-h264-recorder]: Failed to attach to shared memory '" << NAME << "'." << std::endl;
+            std::cerr << "[opendlv-video-h264-recorder]: Failed to attach to shared memory '" << NAME_I420 << "'." << std::endl;
         }
     }
     return retCode;
